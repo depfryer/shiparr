@@ -23,8 +23,8 @@ async def test_deploy_prune_enabled(tmp_path, monkeypatch):
         await session.flush()
 
         # Mock Git/Docker
-        async def fake_remote_hash(local_path, branch): return "def"
-        async def fake_pull(local_path, branch="main"): return "def"
+        async def fake_remote_hash(local_path, branch, url=None, token=None): return "def"
+        async def fake_pull(local_path, branch="main", url=None, token=None): return "def"
         async def fake_clone(*args, **kwargs): pass
         async def fake_local_hash(local_path): return "def"
         
@@ -67,8 +67,8 @@ async def test_deploy_prune_disabled(tmp_path, monkeypatch):
         await session.flush()
 
         # Mock Git/Docker
-        async def fake_remote_hash(local_path, branch): return "def"
-        async def fake_pull(local_path, branch="main"): return "def"
+        async def fake_remote_hash(local_path, branch, url=None, token=None): return "def"
+        async def fake_pull(local_path, branch="main", url=None, token=None): return "def"
         async def fake_clone(*args, **kwargs): pass
         async def fake_local_hash(local_path): return "def"
         

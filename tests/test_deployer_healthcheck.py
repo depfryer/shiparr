@@ -39,11 +39,11 @@ async def test_healthcheck_success(tmp_path: Path, monkeypatch):
         await session.flush()
 
         # Mock Git
-        async def fake_remote_hash(local_path, branch):
+        async def fake_remote_hash(local_path, branch, url=None, token=None):
             return "def" # Force update
-        async def fake_pull(local_path, branch="main"):
+        async def fake_pull(local_path, branch="main", url=None, token=None):
             return "def"
-        async def fake_clone(url, branch, local_path):
+        async def fake_clone(url, branch, local_path, token=None):
             pass
         async def fake_local_hash(local_path):
             return "def"
@@ -114,11 +114,11 @@ async def test_healthcheck_failure(tmp_path: Path, monkeypatch):
         await session.flush()
 
         # Mock Git
-        async def fake_remote_hash(local_path, branch):
+        async def fake_remote_hash(local_path, branch, url=None, token=None):
             return "def" # Force update
-        async def fake_pull(local_path, branch="main"):
+        async def fake_pull(local_path, branch="main", url=None, token=None):
             return "def"
-        async def fake_clone(url, branch, local_path):
+        async def fake_clone(url, branch, local_path, token=None):
             pass
         async def fake_local_hash(local_path):
             return "def"

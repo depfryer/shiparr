@@ -17,13 +17,14 @@ from typing import Optional
 
 import httpx
 from docker.errors import DockerException
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .config import LoadedConfig
 from .git_manager import GitManager
 from .logging_utils import get_logger
-from .models import Deployment, Project, Repository
+from .models import Deployment, Repository
 from .sops_manager import SopsManager
 
 logger = get_logger(__name__)
@@ -36,7 +37,13 @@ class DeploymentError(RuntimeError):
 class Deployer:
     """Orchestre le cycle de déploiement pour un Repository."""
 
-    def __init__(self, session: AsyncSession, notifications=None, prune_enabled: bool = False, config: LoadedConfig | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        notifications=None,
+        prune_enabled: bool = False,
+        config: LoadedConfig | None = None,
+    ) -> None:
         self.session = session
         # notifications: objet NotificationManager ou None (injecté par app)
         self.notifications = notifications
@@ -297,7 +304,12 @@ class Deployer:
             if local_path.exists():
                 try:
                     token = self._resolve_token(repository)
-                    await GitManager.pull(str(local_path), branch=repository.branch, url=repository.git_url, token=token)
+                    await GitManager.pull(
+                        str(local_path),
+                        branch=repository.branch,
+                        url=repository.git_url,
+                        token=token,
+                    )
                 except Exception:
                     # Si échec pull, on est mal car on a déjà validé le hash en DB... 
                     # Mais c'est le risque de l'auto-update.
@@ -454,8 +466,12 @@ class Deployer:
                             "local_path": str(local_path),
                             },
                         )
-                        await GitManager.pull(str(local_path), branch=repository.branch, url=repository.git_url, token=token)
-                        new_hash = await GitManager.get_local_hash(str(local_path))
+                        new_hash = await GitManager.pull(
+                            str(local_path),
+                            branch=repository.branch,
+                            url=repository.git_url,
+                            token=token,
+                        )
                     except Exception:
                         # Si dossier existe mais pas repo git valide ?
                         # (cas rare, on assume repo valide pour l'instant)

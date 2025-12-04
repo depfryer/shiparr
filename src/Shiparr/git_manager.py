@@ -78,7 +78,12 @@ class GitManager:
         return await asyncio.to_thread(_hash)
 
     @staticmethod
-    async def get_remote_hash(local_path: str | Path, branch: str, url: str | None = None, token: str | None = None) -> str:
+    async def get_remote_hash(
+        local_path: str | Path,
+        branch: str,
+        url: str | None = None,
+        token: str | None = None,
+    ) -> str:
         """Fetch et retourne le hash du commit distant pour la branche donnée.
 
         Optimisation: si plusieurs repositories partagent le même dépôt local
@@ -103,14 +108,15 @@ class GitManager:
                 raise GitError(f"Repository does not exist at {path}")
             repo = Repo(path)
             origin = repo.remotes.origin
-            
-            # Mettre à jour l'URL avec le token si fourni
+
+            # Si token fourni, on fetch via l'URL authentifiée SANS modifier la config
             if url and token:
                 auth_url = GitManager._build_auth_url(url, token)
-                if origin.url != auth_url:
-                    origin.set_url(auth_url)
+                # On met à jour explicitement la branche de tracking
+                repo.git.fetch(auth_url, f"{branch}:refs/remotes/origin/{branch}")
+            else:
+                origin.fetch()
 
-            origin.fetch()
             remote_ref = origin.refs[branch]
             return remote_ref.commit.hexsha
 
@@ -124,7 +130,12 @@ class GitManager:
         return remote_hash
 
     @staticmethod
-    async def pull(local_path: str | Path, branch: str = "main", url: str | None = None, token: str | None = None) -> str:
+    async def pull(
+        local_path: str | Path,
+        branch: str = "main",
+        url: str | None = None,
+        token: str | None = None,
+    ) -> str:
         """Effectue un fetch + reset --hard pour garantir l'état."""
 
         path = Path(local_path)
@@ -134,17 +145,15 @@ class GitManager:
                 raise GitError(f"Repository does not exist at {path}")
             repo = Repo(path)
             origin = repo.remotes.origin
-            
-            # Mettre à jour l'URL avec le token si fourni
-            if url and token:
-                auth_url = GitManager._build_auth_url(url, token)
-                if origin.url != auth_url:
-                    origin.set_url(auth_url)
-            
+
             # Retry fetch
             for attempt in range(3):
                 try:
-                    origin.fetch()
+                    if url and token:
+                        auth_url = GitManager._build_auth_url(url, token)
+                        repo.git.fetch(auth_url, f"{branch}:refs/remotes/origin/{branch}")
+                    else:
+                        origin.fetch()
                     break
                 except GitCommandError as e:
                     if attempt == 2:
@@ -166,7 +175,12 @@ class GitManager:
             raise GitError(str(exc)) from exc
 
     @staticmethod
-    async def has_changes(local_path: str | Path, branch: str, url: str | None = None, token: str | None = None) -> bool:
+    async def has_changes(
+        local_path: str | Path,
+        branch: str,
+        url: str | None = None,
+        token: str | None = None,
+    ) -> bool:
         """Compare les hashes local et distant pour détecter un changement."""
 
         local = await GitManager.get_local_hash(local_path)
