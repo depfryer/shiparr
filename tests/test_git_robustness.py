@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-import time
+
 import pytest
 from git import GitCommandError
 
