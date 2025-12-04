@@ -1,0 +1,76 @@
+name: Auto Tag on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [ main ]
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Nécessaire pour récupérer tous les tags
+
+    - name: Determine increment type
+      id: inc-type
+      run: |
+        BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+        echo "Merged branch: $BRANCH_NAME"
+        
+        if [[ "$BRANCH_NAME" == bugfix/* ]]; then
+          echo "type=patch" >> $GITHUB_OUTPUT
+        elif [[ "$BRANCH_NAME" == feature/* ]]; then
+          echo "type=minor" >> $GITHUB_OUTPUT
+        else
+          # Par défaut, on fait un patch pour sécurité
+          echo "type=patch" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get next version and push tag
+      id: tag_version
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        INCREMENT: ${{ steps.inc-type.outputs.type }}
+      run: |
+        # Récupérer le dernier tag, defaut à v0.0.0 si aucun
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Last tag: $LAST_TAG"
+        
+        # Installer semver pour une gestion robuste des versions
+        pip install semver > /dev/null 2>&1
+        
+        # Calculer la nouvelle version via Python (plus sûr que Bash)
+        NEW_TAG=$(python3 -c "
+        import semver, sys
+        try:
+            # Nettoyer le 'v' et parser
+            tag = sys.argv[1].lstrip('v')
+            ver = semver.VersionInfo.parse(tag)
+            
+            # Incrémenter
+            if sys.argv[2] == 'minor':
+                new_ver = ver.bump_minor()
+            else:
+                new_ver = ver.bump_patch()
+                
+            print(f'v{new_ver}')
+        except Exception as e:
+            print(f'Error parsing version: {e}', file=sys.stderr)
+            sys.exit(1)
+        " "$LAST_TAG" "$INCREMENT")
+        
+        echo "New tag: $NEW_TAG"
+        
+        # Configurer git pour pouvoir pusher
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git tag -a "$NEW_TAG" -m "Release $NEW_TAG from PR #${{ github.event.pull_request.number }}"
+        git push origin "$NEW_TAG"
+

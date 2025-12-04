@@ -1,0 +1,61 @@
+"""Pytest fixtures for Shiparr tests."""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import AsyncIterator
+
+import pytest
+from quart import Quart
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from Shiparr.app import create_app
+from Shiparr.database import async_session_factory, init_db
+
+
+@pytest.fixture(scope="session")
+def event_loop():  # type: ignore[override]
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture()
+async def app(tmp_path: Path) -> AsyncIterator[Quart]:
+    # Configure Shiparr_DATA_PATH pour utiliser tmp_path
+    app = create_app()
+    yield app
+
+
+@pytest.fixture()
+async def client(app: Quart):
+    async with app.test_app() as test_app:
+        yield test_app.test_client()
+
+
+@pytest.fixture()
+async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
+    db_path = tmp_path / "test.db"
+    await init_db(db_path)
+    assert async_session_factory is not None
+    async with async_session_factory() as session:
+        yield session
+
+
+@pytest.fixture()
+def sample_project_config(tmp_path: Path) -> Path:
+    cfg = tmp_path / "homelab.yaml"
+    cfg.write_text(
+        """project: homelab
+repositories:
+  media-stack:
+    url: https://example.com/repo.git
+    branch: main
+    path: ./
+    local_path: /tmp/media-stack
+    check_interval: 60
+""",
+        encoding="utf-8",
+    )
+    return cfg

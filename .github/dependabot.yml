@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Maintenir les dépendances Python (pip)
+  - package-ecosystem: "pip"
+    directory: "."
+    schedule:
+      interval: "weekly"
+    
+  # Maintenir les actions GitHub (CI/CD)
+  - package-ecosystem: "github-actions"
+    directory: "."
+    schedule:
+      interval: "weekly"
+
+  # Maintenir l'image Docker de base
+  - package-ecosystem: "docker"
+    directory: "."
+    schedule:
+      interval: "weekly"
+

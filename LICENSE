@@ -1,0 +1,26 @@
+Shiparr - Custom Open Source License
+
+Copyright (c) 2024 YOUR NAME
+
+This software is provided under the following terms:
+
+1. SOURCE CODE AVAILABILITY
+   - The source code must remain publicly available
+   - Any modifications must be published under this same license
+   - Network use constitutes distribution (AGPL clause)
+
+2. NON-COMMERCIAL USE
+   - Free for personal, educational, and non-commercial use
+   - Free for internal business use (not resold as a service)
+
+3. COMMERCIAL USE RESTRICTION
+   - Commercial use (selling, SaaS, reselling) requires explicit
+     written permission from the copyright holder
+   - Contact: YOUR_EMAIL for commercial licensing
+
+4. ATTRIBUTION
+   - Original attribution must be preserved
+   - "Powered by Shiparr" notice required in derivative works
+
+This license is based on AGPL-3.0 with additional commercial restrictions.
+For the full AGPL-3.0 text, see: https://www.gnu.org/licenses/agpl-3.0.html

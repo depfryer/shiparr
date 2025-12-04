@@ -1,0 +1,28 @@
+project: dashy
+description: "Instance Dashy gérée par Shiparr"
+
+# Tokens si besoin (privé), ici public donc facultatif
+#tokens:
+#  github: ${GITHUB_TOKEN}
+
+repositories:
+  dashy-dashboard:
+    # Repo qui contient ton docker-compose.yml
+    # - soit ton fork
+    # - soit un mono-repo infra avec ce fichier dedans
+    url: https://github.com/depfryer/test_dashy
+    branch: main
+    # Chemin relatif dans le repo où se trouve docker-compose.yml
+    path: ./          # ou "deploy/dashy" si tu le ranges ailleurs
+    # Où Shiparr va cloner sur le host
+    # Note: en dev local (python direct), mettre un chemin relatif ou absolu accessible.
+    # Dans Docker, /deployments est monté.
+    local_path: ./deployments/dashy
+    check_interval: 30
+    # Si tu chiffreras un .env avec SOPS plus tard :
+    # env_file: .env.enc
+    notifications:
+      success:
+        - https://discord.com/api/webhooks/1446107457540853891/3GGzNssYn0ry4z4wSaXIzfX157BFBzfWwcJwmNf_xXt3FTbTGJErWRIQd_D3NkZytBG6
+      failure:
+        - https://discord.com/api/webhooks/1446107457540853891/3GGzNssYn0ry4z4wSaXIzfX157BFBzfWwcJwmNf_xXt3FTbTGJErWRIQd_D3NkZytBG6
