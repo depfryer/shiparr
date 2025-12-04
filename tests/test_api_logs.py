@@ -1,10 +1,11 @@
-import pytest
 import asyncio
-from pathlib import Path
-from quart import Quart
-from Shiparr.app import create_app
-from Shiparr.models import Repository, Project
+
+import pytest
+
 from Shiparr import database
+from Shiparr.app import create_app
+from Shiparr.models import Project, Repository
+
 
 @pytest.mark.asyncio
 async def test_get_repository_logs_stream(tmp_path, monkeypatch):

@@ -1,7 +1,9 @@
-import pytest
 from pathlib import Path
-from pydantic import ValidationError
+
+import pytest
+
 from Shiparr.config import ConfigLoader, Settings
+
 
 def test_valid_config(tmp_path: Path):
     config_dir = tmp_path / "config"

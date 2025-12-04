@@ -11,7 +11,8 @@ from quart import Quart
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from Shiparr.app import create_app
-from Shiparr.database import async_session_factory, init_db, dispose_engine
+from Shiparr.database import async_session_factory, dispose_engine, init_db
+
 
 @pytest.fixture(autouse=True)
 async def cleanup_engine():

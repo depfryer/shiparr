@@ -1,7 +1,10 @@
-import pytest
 from unittest.mock import MagicMock
-from Shiparr.git_manager import GitManager, GitError
+
+import pytest
 from git import GitCommandError
+
+from Shiparr.git_manager import GitError, GitManager
+
 
 @pytest.mark.asyncio
 async def test_pull_robustness(tmp_path, monkeypatch):

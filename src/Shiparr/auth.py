@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import base64
 from functools import wraps
-from typing import Callable, Optional
+from typing import Callable
 
-from quart import Request, Response, abort, current_app, request
+from quart import Response, current_app, request
 
 from .config import Settings
 

@@ -25,7 +25,6 @@ from .logging_utils import get_logger
 from .models import Deployment, Repository
 from .sops_manager import SopsManager
 
-
 logger = get_logger(__name__)
 
 
@@ -182,7 +181,7 @@ class Deployer:
                         # On loggue juste en debug pour ne pas spammer, sauf si c'est le dernier essai ?
                         # Non, on continue tant que time < timeout
                         pass
-                except Exception as e:
+                except Exception:
                     # Connection refused, timeout, etc.
                     pass
                 

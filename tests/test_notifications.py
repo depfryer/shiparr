@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from Shiparr.config import LoadedConfig, Settings

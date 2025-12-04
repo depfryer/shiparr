@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 import asyncio
 import json
 from dataclasses import dataclass, field
+
 from sqlalchemy import select
 
-from .models import Repository, Deployment
 from .deployer import Deployer
 from .logging_utils import get_logger
+from .models import Deployment, Repository
 
 logger = get_logger(__name__)
 
@@ -138,7 +140,12 @@ class QueueManager:
             if not dep_repo:
                 continue
                 
-            stmt = select(Deployment).where(Deployment.repository_id == dep_repo.id).order_by(Deployment.id.desc()).limit(1)
+            stmt = (
+                select(Deployment)
+                .where(Deployment.repository_id == dep_repo.id)
+                .order_by(Deployment.id.desc())
+                .limit(1)
+            )
             res = await session.execute(stmt)
             last_dep = res.scalar_one_or_none()
             

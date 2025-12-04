@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from Shiparr.config import LoadedConfig, ProjectConfig, RepositoryConfig, Settings
 from Shiparr.deployer import Deployer
-from Shiparr.models import Deployment, Repository, Project, Base
-from Shiparr.config import ProjectConfig, RepositoryConfig, LoadedConfig, Settings
+from Shiparr.models import Base, Deployment, Project, Repository
 from Shiparr.notifications import NotificationManager
 
 
@@ -187,7 +186,7 @@ async def test_deploy_with_sops(tmp_path: Path, monkeypatch):
             last_commit_hash=None,
         )
         # Inject env_file attribute expected by Deployer
-        setattr(repo, "env_file", "file.env.enc")
+        repo.env_file = "file.env.enc"
         session.add(repo)
         await session.flush()
 

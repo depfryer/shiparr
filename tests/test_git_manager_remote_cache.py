@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
-import importlib
-
 import pytest
-
 from git import GitCommandError
+
 import Shiparr.git_manager as gm
-from Shiparr.git_manager import GitError
 
 
 @pytest.mark.asyncio

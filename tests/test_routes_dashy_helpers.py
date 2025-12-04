@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
-from Shiparr.routes.dashy import _status_class, _container_ok, _get_repo_containers
+from Shiparr.routes.dashy import _container_ok, _get_repo_containers, _status_class
 
 
 def test_status_class_mapping() -> None:

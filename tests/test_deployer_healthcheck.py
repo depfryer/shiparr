@@ -1,12 +1,13 @@
 from __future__ import annotations
-import pytest
-import asyncio
+
 from pathlib import Path
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from Shiparr.deployer import Deployer, DeploymentError
-from Shiparr.models import Repository, Base
-from Shiparr.git_manager import GitManager
-import httpx
+
+from Shiparr.deployer import Deployer
+from Shiparr.models import Base, Repository
+
 
 @pytest.mark.asyncio
 async def test_healthcheck_success(tmp_path: Path, monkeypatch):

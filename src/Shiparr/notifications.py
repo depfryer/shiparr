@@ -8,16 +8,14 @@ Responsabilités:
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime
-from typing import Iterable, List
+from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from .config import LoadedConfig
 from .logging_utils import get_logger
-from .models import Deployment, Repository, Project
-
+from .models import Deployment, Project, Repository
 
 logger = get_logger(__name__)
 

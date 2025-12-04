@@ -1,9 +1,10 @@
+
 import pytest
-from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from Shiparr.deployer import Deployer
-from Shiparr.models import Repository, Base
-from Shiparr.git_manager import GitManager
+from Shiparr.models import Base, Repository
+
 
 @pytest.mark.asyncio
 async def test_deploy_prune_enabled(tmp_path, monkeypatch):

@@ -1,8 +1,11 @@
-import pytest
 import asyncio
 from pathlib import Path
+
+import pytest
 from sqlalchemy import text
-from Shiparr.database import init_engine, dispose_engine
+
+from Shiparr.database import dispose_engine, init_engine
+
 
 @pytest.mark.asyncio
 async def test_sqlite_concurrency(tmp_path: Path):

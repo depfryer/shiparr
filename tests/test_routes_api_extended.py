@@ -5,10 +5,9 @@ from datetime import datetime
 import pytest
 from quart import Quart
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy import select
 
 from Shiparr.config import Settings
-from Shiparr.models import Base, Project, Repository, Deployment
+from Shiparr.models import Base, Deployment, Project, Repository
 from Shiparr.routes import api
 
 

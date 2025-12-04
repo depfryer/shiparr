@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 
-from quart import Blueprint, jsonify, current_app, request, Response
+from quart import Blueprint, Response, current_app, jsonify, request
 from sqlalchemy import select
 
 from ..auth import require_basic_auth
@@ -266,7 +266,7 @@ async def get_repository_logs(repo_id: int) -> Any:
         env = {**os.environ, "COMPOSE_PROJECT_NAME": f"shiparr_repo_{repo.id}"}
         cmd = ["docker", "compose", "logs", "-f", "-n", str(tail)]
 
-        async def generate():
+        async def generate(cmd=cmd, workdir=workdir, env=env):
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(workdir),

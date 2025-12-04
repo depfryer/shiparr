@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+import pytest
 
 from Shiparr.config import ConfigLoader, Settings, _load_yaml_file
 
@@ -21,7 +22,7 @@ def test_load_invalid_yaml(tmp_path: Path) -> None:
     except ValueError:
         pass
     else:
-        assert False, "Expected ValueError for non-mapping root"
+        pytest.fail("Expected ValueError for non-mapping root")
 
 
 def test_env_variable_resolution(tmp_path: Path, monkeypatch) -> None:
@@ -43,7 +44,7 @@ def test_missing_required_fields(tmp_path: Path) -> None:
     except Exception:
         pass
     else:
-        assert False, "Expected validation error when repositories missing"
+        pytest.fail("Expected validation error when repositories missing")
 
 
 def test_multiple_repositories(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from Shiparr import database
-from Shiparr.database import Base, dispose_engine, get_database_url, get_session, init_db
+from Shiparr.database import dispose_engine, get_database_url, get_session, init_db
 
 
 def test_get_database_url_creates_parent(tmp_path: Path) -> None:

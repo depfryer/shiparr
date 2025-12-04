@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from git import Repo, GitCommandError
+from git import GitCommandError, Repo
 
 # Cache pour éviter de faire plusieurs fetch() consécutifs pour le même dépôt
 # lorsqu'il est référencé par plusieurs projets.

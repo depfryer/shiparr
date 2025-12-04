@@ -1,10 +1,12 @@
-import pytest
 import asyncio
 import json
-from pathlib import Path
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from Shiparr.models import Repository, Deployment, Project, Base
+
+from Shiparr.models import Base, Deployment, Project, Repository
 from Shiparr.queue_manager import QueueManager
+
 
 @pytest.mark.asyncio
 async def test_priority(tmp_path, monkeypatch):
@@ -25,8 +27,24 @@ async def test_priority(tmp_path, monkeypatch):
         session.add(p)
         await session.flush()
         
-        r1 = Repository(project_id=p.id, name="r1", git_url="u", branch="m", path="./", local_path="/tmp/1", check_interval=60)
-        r2 = Repository(project_id=p.id, name="r2", git_url="u", branch="m", path="./", local_path="/tmp/2", check_interval=60)
+        r1 = Repository(
+            project_id=p.id,
+            name="r1",
+            git_url="u",
+            branch="m",
+            path="./",
+            local_path="/tmp/1",
+            check_interval=60
+        )
+        r2 = Repository(
+            project_id=p.id,
+            name="r2",
+            git_url="u",
+            branch="m",
+            path="./",
+            local_path="/tmp/2",
+            check_interval=60
+        )
         session.add_all([r1, r2])
         await session.commit()
         id1, id2 = r1.id, r2.id

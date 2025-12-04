@@ -51,8 +51,10 @@ addopts = "-v --cov=Shiparr --cov-report=term-missing"
 asyncio_mode = "auto"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "B"]
 
 [tool.coverage.run]

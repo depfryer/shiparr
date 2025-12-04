@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 import yaml
-from pydantic import BaseModel, Field, validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .logging_utils import get_logger

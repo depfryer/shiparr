@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
-from Shiparr.config import RepositoryConfig, ProjectConfig
+
+from Shiparr.config import ProjectConfig, RepositoryConfig
+
 
 def test_valid_names():
     RepositoryConfig(name="valid-name_1", url="u", local_path="/tmp")

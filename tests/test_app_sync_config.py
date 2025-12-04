@@ -6,9 +6,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from Shiparr import database
 from Shiparr.app import _sync_config_to_db
 from Shiparr.config import LoadedConfig, ProjectConfig, RepositoryConfig, Settings
-from Shiparr import database
 from Shiparr.models import Base, Project, Repository
 
 

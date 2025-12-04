@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import shutil
 import json
+import shutil
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from quart import Quart
 from sqlalchemy import select
 
+from . import database
 from .config import ConfigLoader, LoadedConfig, Settings
 from .database import dispose_engine, init_db
-from . import database
 from .logging_utils import configure_logging, get_logger
 from .models import Project, Repository
 from .routes import create_blueprint

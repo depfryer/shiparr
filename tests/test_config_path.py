@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
+
 from Shiparr.config import RepositoryConfig
+
 
 def test_valid_path():
     cfg = RepositoryConfig(
