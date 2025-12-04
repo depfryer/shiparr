@@ -40,7 +40,7 @@ async def test_healthcheck_success(tmp_path: Path, monkeypatch):
         # Mock Git
         async def fake_remote_hash(local_path, branch):
             return "def" # Force update
-        async def fake_pull(local_path):
+        async def fake_pull(local_path, branch="main"):
             return "def"
         async def fake_clone(url, branch, local_path):
             pass
@@ -115,7 +115,7 @@ async def test_healthcheck_failure(tmp_path: Path, monkeypatch):
         # Mock Git
         async def fake_remote_hash(local_path, branch):
             return "def" # Force update
-        async def fake_pull(local_path):
+        async def fake_pull(local_path, branch="main"):
             return "def"
         async def fake_clone(url, branch, local_path):
             pass
