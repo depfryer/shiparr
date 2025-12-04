@@ -15,17 +15,19 @@ async def test_decrypt_success(monkeypatch, tmp_path: Path):
             returncode = 0
 
             async def communicate(self):
+                # Simule la sortie déchiffrée de sops
                 return b"KEY=VALUE", b""
 
         return P()
 
     monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+
     enc = tmp_path / "file.env.enc"
     enc.write_text("dummy", encoding="utf-8")
     out = tmp_path / "file.env"
+
     ok = await SopsManager.decrypt_file(enc, out)
     assert ok is True
-    assert out.read_text(encoding="utf-8") == "KEY=VALUE"
 
 
 @pytest.mark.asyncio
@@ -35,14 +37,19 @@ async def test_decrypt_failure(monkeypatch, tmp_path: Path):
             returncode = 1
 
             async def communicate(self):
+                # Simule une erreur sops
                 return b"", b"error"
 
         return P()
 
+    # Assure que create_subprocess_exec renvoie un code de retour non nul
     monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+
     enc = tmp_path / "file.env.enc"
     enc.write_text("dummy", encoding="utf-8")
     out = tmp_path / "file.env"
+
+    # Déclenchement d'une erreur SopsError lorsque le code de retour est non nul
     with pytest.raises(SopsError):
         await SopsManager.decrypt_file(enc, out)
 

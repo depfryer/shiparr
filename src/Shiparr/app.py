@@ -31,11 +31,70 @@ async def _sync_config_to_db(
     - Crée les projets/repos manquants
     - Met à jour les repos existants
     - Supprime les repos qui n'existent plus dans la config
+
+    Optimisations / gardes supplémentaires:
+    - Si plusieurs projets référencent le *même* dépôt Git (même ``local_path``
+      et même branche), on laisse la DB créer un Repository par projet mais on
+      peut mutualiser les appels Git via un cache dans :mod:`git_manager`.
+    - Si deux repositories partagent exactement le même ``local_path`` mais
+      déclarent une ``url`` ou une ``branch`` différente, cela représente une
+      configuration invalide (même dossier disque pour deux remotes différents).
+      Dans ce cas, on log un warning et on ignore la définition conflictuelle.
     """
 
     if database.async_session_factory is None:  # type: ignore[truthy-function]
         logger.error("async_session_factory is None in _sync_config_to_db - DB not initialised")
         return
+
+    # Détection préalable des conflits de local_path entre projets/repos.
+    # Clé: chemin absolu -> (url, branch, project, repo_name)
+    local_path_index: dict[str, tuple[str, str, str, str]] = {}
+    repos_to_skip: set[tuple[str, str]] = set()
+
+    for project_cfg in loaded.projects.values():
+        for repo_name, repo_cfg in project_cfg.repositories.items():
+            local_path_str = str(Path(repo_cfg.local_path).resolve())
+            existing = local_path_index.get(local_path_str)
+            if existing is None:
+                local_path_index[local_path_str] = (
+                    repo_cfg.url,
+                    repo_cfg.branch,
+                    project_cfg.project,
+                    repo_name,
+                )
+                continue
+
+            existing_url, existing_branch, existing_project, existing_repo = existing
+            # Même dossier mais URL/branche différentes -> configuration incohérente
+            if repo_cfg.url != existing_url or repo_cfg.branch != existing_branch:
+                logger.warning(
+                    "Conflicting repository configuration detected for shared local_path; "
+                    "skipping duplicate entry",
+                    extra={
+                        "local_path": local_path_str,
+                        "first_project": existing_project,
+                        "first_repository": existing_repo,
+                        "first_url": existing_url,
+                        "first_branch": existing_branch,
+                        "conflicting_project": project_cfg.project,
+                        "conflicting_repository": repo_name,
+                        "conflicting_url": repo_cfg.url,
+                        "conflicting_branch": repo_cfg.branch,
+                    },
+                )
+                repos_to_skip.add((project_cfg.project, repo_name))
+            else:
+                # Même dépôt (url/branche) et même dossier local: on log pour debug.
+                logger.info(
+                    "Multiple repositories share the same Git local_path and branch; "
+                    "Git remote checks will be mutualised.",
+                    extra={
+                        "local_path": local_path_str,
+                        "branch": repo_cfg.branch,
+                        "project": project_cfg.project,
+                        "repository": repo_name,
+                    },
+                )
 
     async with database.async_session_factory() as session:  # type: ignore[call-arg]
         # Index existant en mémoire
@@ -74,6 +133,19 @@ async def _sync_config_to_db(
 
             # Upsert depuis la config
             for repo_name, repo_cfg in project_cfg.repositories.items():
+                # Si ce repo a été marqué comme conflictuel (même local_path mais
+                # url/branche différentes qu'un autre repo), on l'ignore.
+                if (project_cfg.project, repo_name) in repos_to_skip:
+                    logger.debug(
+                        "Skipping repository with conflicting local_path configuration",
+                        extra={
+                            "project": project_cfg.project,
+                            "repository": repo_name,
+                            "local_path": repo_cfg.local_path,
+                        },
+                    )
+                    continue
+
                 repo = existing_repos.get(repo_name)
                 if repo is None:
                     logger.info(
