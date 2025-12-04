@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from docker.errors import DockerException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +24,6 @@ from .git_manager import GitManager
 from .logging_utils import get_logger
 from .models import Deployment, Repository
 from .sops_manager import SopsManager
-
 
 logger = get_logger(__name__)
 
@@ -35,10 +35,11 @@ class DeploymentError(RuntimeError):
 class Deployer:
     """Orchestre le cycle de déploiement pour un Repository."""
 
-    def __init__(self, session: AsyncSession, notifications=None) -> None:
+    def __init__(self, session: AsyncSession, notifications=None, prune_enabled: bool = False) -> None:
         self.session = session
         # notifications: objet NotificationManager ou None (injecté par app)
         self.notifications = notifications
+        self.prune_enabled = prune_enabled
 
     async def _create_deployment(self, repository: Repository, status: str) -> Deployment:
         deployment = Deployment(
@@ -140,6 +141,57 @@ class Deployer:
             )
             return False
 
+    async def _perform_healthcheck(self, repository: Repository, logs_parts: list[str]) -> bool:
+        """Exécute le healthcheck si configuré.
+        
+        Retourne True si le healthcheck passe ou n'est pas configuré.
+        Retourne False si échec.
+        """
+        if not repository.healthcheck_url:
+            return True
+
+        url = repository.healthcheck_url
+        timeout = repository.healthcheck_timeout or 60
+        expected_status = repository.healthcheck_expected_status or 200
+
+        logger.info(
+            "Waiting for healthcheck",
+            extra={
+                "repository_id": repository.id,
+                "url": url,
+                "timeout": timeout
+            }
+        )
+        logs_parts.append(f"Starting healthcheck on {url} (timeout: {timeout}s)")
+
+        start_time = datetime.utcnow()
+        
+        async with httpx.AsyncClient(verify=False) as client:
+            while (datetime.utcnow() - start_time).total_seconds() < timeout:
+                try:
+                    response = await client.get(url, timeout=5.0)
+                    if response.status_code == expected_status:
+                        logger.info(
+                            "Healthcheck passed",
+                            extra={"repository_id": repository.id, "status": response.status_code}
+                        )
+                        logs_parts.append(f"Healthcheck passed: {url} returned {response.status_code}")
+                        return True
+                    else:
+                        # On loggue juste en debug pour ne pas spammer, sauf si c'est le dernier essai ?
+                        # Non, on continue tant que time < timeout
+                        pass
+                except Exception:
+                    # Connection refused, timeout, etc.
+                    pass
+                
+                await asyncio.sleep(2)
+
+        error_msg = f"Healthcheck failed: {url} did not return {expected_status} within {timeout}s"
+        logger.error(error_msg, extra={"repository_id": repository.id})
+        logs_parts.append(error_msg)
+        return False
+
     async def deploy(self, repository_id: int) -> Deployment:
         """Flux complet de déploiement pour un repository.
 
@@ -214,7 +266,7 @@ class Deployer:
             local_path = Path(repository.local_path).resolve()
             if local_path.exists():
                 try:
-                    await GitManager.pull(str(local_path))
+                    await GitManager.pull(str(local_path), branch=repository.branch)
                 except Exception:
                     # Si échec pull, on est mal car on a déjà validé le hash en DB... 
                     # Mais c'est le risque de l'auto-update.
@@ -364,10 +416,10 @@ class Deployer:
                             "Pulling repository",
                             extra={
                                 "repository_id": repository.id,
-                                "local_path": str(local_path),
+                            "local_path": str(local_path),
                             },
                         )
-                        new_hash = await GitManager.pull(str(local_path))
+                        new_hash = await GitManager.pull(str(local_path), branch=repository.branch)
                     except Exception:
                         # Si dossier existe mais pas repo git valide ?
                         # (cas rare, on assume repo valide pour l'instant)
@@ -487,6 +539,10 @@ class Deployer:
                 )
                  raise DeploymentError(f"docker compose failed after {max_retries} attempts: {last_error_msg}")
 
+            # 7. Healthcheck
+            if not await self._perform_healthcheck(repository, logs_parts):
+                 raise DeploymentError("Healthcheck failed after deployment")
+
             logs = "\n".join(logs_parts).strip()
             await self._update_deployment(deployment, status="success", logs=logs)
             await self.session.commit()
@@ -496,9 +552,22 @@ class Deployer:
                 extra={"deployment_id": deployment.id, "repository_id": repository.id},
             )
 
-            # 9. Notifications succès
+            # 8. Notifications succès
             if self.notifications is not None:
                 await self.notifications.notify_for_deployment("success", deployment)
+
+            # 9. Prune images if enabled
+            if self.prune_enabled:
+                try:
+                    logger.info("Pruning unused images", extra={"repository_id": repository.id})
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker", "image", "prune", "-f",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    await proc.communicate()
+                except Exception as e:
+                    logger.warning(f"Image prune failed: {e}", extra={"repository_id": repository.id})
 
             return deployment
 

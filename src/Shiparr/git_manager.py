@@ -13,10 +13,20 @@ GitPython n'est pas async, donc on utilise asyncio.to_thread.
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Optional
 
-from git import Repo, GitCommandError
+from git import GitCommandError, Repo
+
+# Cache pour éviter de faire plusieurs fetch() consécutifs pour le même dépôt
+# lorsqu'il est référencé par plusieurs projets.
+# Clé: (local_path_resolu, branch) -> (timestamp_monotonic, remote_hash)
+_REMOTE_HASH_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
+# Petite durée de vie: assez longue pour mutualiser les checks dans une rafale
+# de déploiements, mais suffisamment courte pour ne pas masquer de nouveaux
+# commits entre deux cycles.
+_REMOTE_HASH_TTL_SECONDS: float = 5.0
 
 
 class GitError(RuntimeError):
@@ -69,9 +79,24 @@ class GitManager:
 
     @staticmethod
     async def get_remote_hash(local_path: str | Path, branch: str) -> str:
-        """Fetch et retourne le hash du commit distant pour la branche donnée."""
+        """Fetch et retourne le hash du commit distant pour la branche donnée.
 
-        path = Path(local_path)
+        Optimisation: si plusieurs repositories partagent le même dépôt local
+        (même ``local_path`` et même ``branch``), on ne fait qu'un seul
+        ``fetch()`` toutes les quelques secondes et on réutilise le hash
+        mémorisé pour les appels suivants.
+        """
+
+        path = Path(local_path).resolve()
+        cache_key = (str(path), branch)
+
+        # Vérifier si on a un hash récent en cache
+        now = time.monotonic()
+        cached = _REMOTE_HASH_CACHE.get(cache_key)
+        if cached is not None:
+            ts, cached_hash = cached
+            if now - ts <= _REMOTE_HASH_TTL_SECONDS:
+                return cached_hash
 
         def _remote_hash() -> str:
             if not path.exists():
@@ -83,13 +108,17 @@ class GitManager:
             return remote_ref.commit.hexsha
 
         try:
-            return await asyncio.to_thread(_remote_hash)
+            remote_hash = await asyncio.to_thread(_remote_hash)
         except GitCommandError as exc:  # pragma: no cover
             raise GitError(str(exc)) from exc
 
+        # Mettre à jour le cache avec le hash fraîchement récupéré
+        _REMOTE_HASH_CACHE[cache_key] = (now, remote_hash)
+        return remote_hash
+
     @staticmethod
-    async def pull(local_path: str | Path) -> str:
-        """Effectue un git pull et retourne le nouveau hash."""
+    async def pull(local_path: str | Path, branch: str = "main") -> str:
+        """Effectue un fetch + reset --hard pour garantir l'état."""
 
         path = Path(local_path)
 
@@ -98,7 +127,24 @@ class GitManager:
                 raise GitError(f"Repository does not exist at {path}")
             repo = Repo(path)
             origin = repo.remotes.origin
-            origin.pull()
+            
+            # Retry fetch
+            for attempt in range(3):
+                try:
+                    origin.fetch()
+                    break
+                except GitCommandError as e:
+                    if attempt == 2:
+                        raise GitError(f"Fetch failed after 3 attempts: {e}") from e
+                    time.sleep(2)
+
+            # Reset hard instead of pull to avoid conflicts
+            try:
+                repo.git.reset("--hard", f"origin/{branch}")
+                repo.git.clean("-fd")
+            except GitCommandError as e:
+                 raise GitError(f"Reset/Clean failed: {e}") from e
+                 
             return repo.head.commit.hexsha
 
         try:

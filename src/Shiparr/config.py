@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 import yaml
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .logging_utils import get_logger
@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     github_token: str | None = Field(default=None, alias="GITHUB_TOKEN")
 
     # Options avancées
+    enable_image_prune: bool = Field(
+        default=False,
+        description="Execute docker image prune -f after successful deployment.",
+    )
     disable_config_autoreload: bool = Field(
         default=False,
         description="Désactive le rechargement automatique des configurations YAML.",
@@ -83,22 +87,66 @@ class Settings(BaseSettings):
 
 class RepositoryConfig(BaseModel):
     """Configuration d'un dépôt Git à déployer."""
+    model_config = ConfigDict(extra="forbid")
 
     name: str
+
+    @validator("name")
+    def _validate_name_chars(cls, v: str) -> str:
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError("Repository name must contain only alphanumeric characters, underscores, or hyphens.")
+        return v
     url: str
     branch: str = "main"
     path: str = "./"  # Sous-dossier contenant docker-compose.yml
     local_path: str
     check_interval: int = 300
+    priority: int = 0
+    depends_on: list[str] = Field(default_factory=list)
     env_file: str | None = None
+    
+    # Healthchecks
+    healthcheck_url: str | None = None
+    healthcheck_timeout: int = 60
+    healthcheck_expected_status: int = 200
 
     notifications: Dict[str, list[str]] | None = None
+
+    @validator("path")
+    def _validate_path_traversal(cls, v: str) -> str:
+        """Vérifie que le path ne sort pas du dossier racine (pas de traversal)."""
+        if v is None:
+            return v
+            
+        p = Path(v)
+        if p.is_absolute():
+             raise ValueError("Le chemin 'path' doit être relatif.")
+             
+        # Vérification logique du traversal
+        dummy_root = Path("/dummy_root")
+        try:
+            resolved = (dummy_root / v).resolve()
+            # .is_relative_to requires Python 3.9+
+            if not resolved.is_relative_to(dummy_root):
+                raise ValueError(f"Path traversal detected: {v}")
+        except Exception as e:
+            # Si resolve échoue ou autre
+            raise ValueError(f"Invalid path: {v}") from e
+            
+        return v
 
 
 class ProjectConfig(BaseModel):
     """Configuration d'un projet Shiparr (ensemble de repositories)."""
+    model_config = ConfigDict(extra="forbid")
 
     project: str
+
+    @validator("project")
+    def _validate_project_name_chars(cls, v: str) -> str:
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError("Project name must contain only alphanumeric characters, underscores, or hyphens.")
+        return v
     description: str | None = None
 
     tokens: Dict[str, str] | None = None

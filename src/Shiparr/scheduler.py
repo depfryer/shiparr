@@ -8,12 +8,11 @@ Responsabilités:
 
 from __future__ import annotations
 
-from typing import Callable, Dict
+from typing import Callable
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from .deployer import Deployer
 from .models import Repository
 
 

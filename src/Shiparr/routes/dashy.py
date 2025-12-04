@@ -562,7 +562,8 @@ async def repo_containers_html(repo_id: int) -> Any:
                 f"<td class='repo'>{name}</td>"
                 f"<td>{image_name}</td>"
                 f"<td class='status {status_class}'>{state}</td>"
-                f"<td><a href='/widget/projects/{repo.id}/containers/logs?container={c_id}&tail=200' target='_blank' rel='noreferrer noopener'>logs -f</a></td>"
+                f"<td><a href='/widget/projects/{repo.id}/containers/logs"
+                f"?container={c_id}&tail=200' target='_blank' rel='noreferrer noopener'>logs -f</a></td>"
                 "</tr>"
             )
 

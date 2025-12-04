@@ -76,7 +76,7 @@ async def test_pull_success(monkeypatch, tmp_path: Path):
 
     class DummyRepo:
         remotes = type("R", (), {"origin": DummyOrigin()})()
-        head = type("H", (), {"commit": type("C", (), {"hexsha": "ghi"})()})()
+        head = type("H", (), {"commit": type("C", (), {"hexsha": "def"})()})()
 
     def fake_repo(path):  # type: ignore[unused-argument]
         return DummyRepo()
@@ -85,4 +85,4 @@ async def test_pull_success(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("Shiparr.git_manager.Repo", fake_repo)
 
     h = await GitManager.pull(tmp_path)
-    assert h == "ghi"
+    assert h == "def"

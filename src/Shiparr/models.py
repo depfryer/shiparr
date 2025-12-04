@@ -43,6 +43,13 @@ class Repository(Base):
     local_path: Mapped[str] = mapped_column(String, nullable=False)
     last_commit_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     check_interval: Mapped[int] = mapped_column(Integer, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    depends_on: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Healthcheck configuration
+    healthcheck_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    healthcheck_timeout: Mapped[int] = mapped_column(Integer, default=60)
+    healthcheck_expected_status: Mapped[int] = mapped_column(Integer, default=200)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from Shiparr.config import LoadedConfig, ProjectConfig, RepositoryConfig, Settings
 from Shiparr.deployer import Deployer
-from Shiparr.models import Deployment, Repository, Project, Base
-from Shiparr.config import ProjectConfig, RepositoryConfig, LoadedConfig, Settings
+from Shiparr.models import Base, Deployment, Project, Repository
 from Shiparr.notifications import NotificationManager
 
 
 @pytest.mark.asyncio
-async def test_deploy_no_changes(tmp_path: Path):
+async def test_deploy_no_changes(tmp_path: Path, monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -41,10 +40,19 @@ async def test_deploy_no_changes(tmp_path: Path):
 
         git_manager.GitManager.get_remote_hash = fake_remote_hash  # type: ignore[assignment]
 
+        # Simuler des conteneurs déjà en cours d'exécution pour ne pas forcer un déploiement
+        async def fake_check(self, workdir, env):  # type: ignore[unused-argument]
+            return True
+
+        monkeypatch.setattr(
+            "Shiparr.deployer.Deployer._check_containers_running",
+            fake_check,
+        )
+
         deployer = Deployer(session=session)
         dep = await deployer.deploy(repo.id)
         assert dep.status == "success"
-        assert dep.logs == "No changes"
+        assert dep.logs == "No changes, services running"
 
 
 @pytest.mark.asyncio
@@ -56,13 +64,18 @@ async def test_deploy_with_changes(tmp_path: Path, monkeypatch):
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as session:
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        # Rendre le dossier non vide pour éviter le chemin de clonage initial
+        (repo_dir / "dummy.txt").write_text("x", encoding="utf-8")
+
         repo = Repository(
             project_id=1,
             name="repo",
             git_url="https://example.com/repo.git",
             branch="main",
             path="./",
-            local_path=str(tmp_path / "repo"),
+            local_path=str(repo_dir),
             check_interval=60,
             last_commit_hash="abc",
         )
@@ -74,7 +87,7 @@ async def test_deploy_with_changes(tmp_path: Path, monkeypatch):
         async def fake_remote_hash(local_path, branch):  # type: ignore[unused-argument]
             return "def"
 
-        async def fake_pull(local_path):  # type: ignore[unused-argument]
+        async def fake_pull(local_path, branch="main"):  # type: ignore[unused-argument]
             return "def"
 
         git_manager.GitManager.get_remote_hash = fake_remote_hash  # type: ignore[assignment]
@@ -105,13 +118,17 @@ async def test_deploy_failure(tmp_path: Path, monkeypatch):
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as session:
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "dummy.txt").write_text("x", encoding="utf-8")
+
         repo = Repository(
             project_id=1,
             name="repo",
             git_url="https://example.com/repo.git",
             branch="main",
             path="./",
-            local_path=str(tmp_path / "repo"),
+            local_path=str(repo_dir),
             check_interval=60,
             last_commit_hash="abc",
         )
@@ -123,7 +140,7 @@ async def test_deploy_failure(tmp_path: Path, monkeypatch):
         async def fake_remote_hash(local_path, branch):  # type: ignore[unused-argument]
             return "def"
 
-        async def fake_pull(local_path):  # type: ignore[unused-argument]
+        async def fake_pull(local_path, branch="main"):  # type: ignore[unused-argument]
             return "def"
 
         git_manager.GitManager.get_remote_hash = fake_remote_hash  # type: ignore[assignment]
@@ -154,24 +171,28 @@ async def test_deploy_with_sops(tmp_path: Path, monkeypatch):
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as session:
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "dummy.txt").write_text("x", encoding="utf-8")
+
         repo = Repository(
             project_id=1,
             name="repo",
             git_url="https://example.com/repo.git",
             branch="main",
             path="./",
-            local_path=str(tmp_path / "repo"),
+            local_path=str(repo_dir),
             check_interval=60,
             last_commit_hash=None,
         )
         # Inject env_file attribute expected by Deployer
-        setattr(repo, "env_file", "file.env.enc")
+        repo.env_file = "file.env.enc"
         session.add(repo)
         await session.flush()
 
         from Shiparr import git_manager
 
-        async def fake_pull(local_path):  # type: ignore[unused-argument]
+        async def fake_pull(local_path, branch="main"):  # type: ignore[unused-argument]
             return "def"
 
         git_manager.GitManager.pull = fake_pull  # type: ignore[assignment]
@@ -179,9 +200,11 @@ async def test_deploy_with_sops(tmp_path: Path, monkeypatch):
         async def fake_dec(enc, out):  # type: ignore[unused-argument]
             return True
 
-        from Shiparr import sops_manager
-
-        sops_manager.SopsManager.decrypt_file = fake_dec  # type: ignore[assignment]
+        # Patch SopsManager.decrypt_file uniquement pour ce test
+        monkeypatch.setattr(
+            "Shiparr.sops_manager.SopsManager.decrypt_file",
+            fake_dec,
+        )
 
         async def fake_exec(*args, **kwargs):  # type: ignore[unused-argument]
             class P:
