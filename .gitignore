@@ -45,6 +45,7 @@ deployments/
 *.db
 *.db-shm
 *.db-wal
+config/
 
 # Environment variables
 .env
