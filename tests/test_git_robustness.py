@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock
-
+import time
 import pytest
 from git import GitCommandError
 
-from Shiparr.git_manager import GitError, GitManager
+import Shiparr.git_manager as gm
 
 
 @pytest.mark.asyncio
@@ -24,12 +24,16 @@ async def test_pull_robustness(tmp_path, monkeypatch):
     def fake_Repo(path):
         return mock_repo
         
-    monkeypatch.setattr("Shiparr.git_manager.Repo", fake_Repo)
+    # Patch Repo in the module where it is used
+    monkeypatch.setattr(gm, "Repo", fake_Repo)
+    
+    # Patch time.sleep to go faster
+    monkeypatch.setattr("time.sleep", lambda x: None)
     
     # Setup dir
     (tmp_path / "repo").mkdir()
     
-    await GitManager.pull(tmp_path / "repo", branch="main")
+    await gm.GitManager.pull(tmp_path / "repo", branch="main")
     
     assert mock_origin.fetch.call_count == 3
     mock_repo.git.reset.assert_called_with("--hard", "origin/main")
@@ -47,9 +51,10 @@ async def test_pull_failure(tmp_path, monkeypatch):
     
     def fake_Repo(path):
         return mock_repo
-    monkeypatch.setattr("Shiparr.git_manager.Repo", fake_Repo)
+    monkeypatch.setattr(gm, "Repo", fake_Repo)
+    monkeypatch.setattr("time.sleep", lambda x: None)
     
     (tmp_path / "repo").mkdir()
     
-    with pytest.raises(GitError):
-        await GitManager.pull(tmp_path / "repo", branch="main")
+    with pytest.raises(gm.GitError):
+        await gm.GitManager.pull(tmp_path / "repo", branch="main")

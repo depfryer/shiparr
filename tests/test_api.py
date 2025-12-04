@@ -8,8 +8,12 @@ from Shiparr.app import create_app
 
 
 @pytest.mark.asyncio
-async def test_health_endpoint():
+async def test_health_endpoint(tmp_path):
     app = create_app()
+    # Use tmp_path for config/data to ensure fresh DB
+    app.config["Shiparr_SETTINGS"].config_path = tmp_path / "config"
+    app.config["Shiparr_SETTINGS"].data_path = tmp_path / "data"
+    
     async with app.test_app() as test_app:
         client = test_app.test_client()
         resp = await client.get("/api/health")
@@ -17,8 +21,11 @@ async def test_health_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_auth_required(monkeypatch):
+async def test_auth_required(monkeypatch, tmp_path):
     app = create_app()
+    app.config["Shiparr_SETTINGS"].config_path = tmp_path / "config"
+    app.config["Shiparr_SETTINGS"].data_path = tmp_path / "data"
+    
     settings = app.config["Shiparr_SETTINGS"]
     settings.auth_enabled = True
 
@@ -29,8 +36,11 @@ async def test_auth_required(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_auth_success(monkeypatch):
+async def test_auth_success(monkeypatch, tmp_path):
     app = create_app()
+    app.config["Shiparr_SETTINGS"].config_path = tmp_path / "config"
+    app.config["Shiparr_SETTINGS"].data_path = tmp_path / "data"
+    
     settings = app.config["Shiparr_SETTINGS"]
     settings.auth_enabled = True
     settings.auth_username = "user"
