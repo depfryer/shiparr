@@ -57,11 +57,17 @@ class QueueManager:
 
     async def _worker(self):
         while self.running:
+            semaphore_acquired = False
+            job_claimed = False
+            task_dispatched = False
+
             try:
                 # Wait for semaphore first to respect concurrency limit
                 await self.semaphore.acquire()
-                
+                semaphore_acquired = True
+
                 job: Job = await self.queue.get()
+                job_claimed = True
                 repo_id = job.repo_id
                 
                 async with self.session_factory() as session:
@@ -70,38 +76,30 @@ class QueueManager:
                     repo = result.scalar_one_or_none()
                     
                     if not repo:
-                        self.queue.task_done()
-                        self.semaphore.release()
                         continue
 
                     if not await self._check_dependencies(session, repo):
                         logger.info("Dependencies not satisfied, re-queueing", extra={"repo_id": repo.id})
                         await asyncio.sleep(self.retry_delay) # Backoff
                         await self.queue.put(job)
-                        self.queue.task_done()
-                        self.semaphore.release()
                         continue
 
                     project_id = repo.project_id
                     
                 lock = await self._get_project_lock(project_id)
                 asyncio.create_task(self._process_job(repo_id, lock))
+                task_dispatched = True
                 
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("Worker error")
                 await asyncio.sleep(1)
-                # Ensure we release semaphore if we acquired it but failed before spawning task
-                # But here exceptions usually happen in get() or logic.
-                # If exception happens after acquire(), we leak semaphore.
-                # It's tricky. 
-                # Since we wrap create_task, the task handles release.
-                # If we fail BEFORE create_task, we must release.
-                # I should wrap the block in try/finally or careful handling.
-                # For now, I'll assume if I crash here, I might leak a slot, but supervisor will restart me?
-                # No, it's a loop.
-                pass
+            finally:
+                if job_claimed and not task_dispatched:
+                    self.queue.task_done()
+                if semaphore_acquired and not task_dispatched:
+                    self.semaphore.release()
 
     async def _process_job(self, repo_id, lock):
         try:
