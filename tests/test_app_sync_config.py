@@ -102,6 +102,65 @@ async def test_sync_config_shared_local_path_conflict(tmp_path: Path, caplog) ->
 
 
 @pytest.mark.asyncio
+async def test_conflicting_repo_is_deleted_if_previously_present(tmp_path: Path) -> None:
+    """Un dépôt conflictuel doit être supprimé s'il existait déjà en base."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    database.async_engine = engine
+    database.async_session_factory = async_session
+
+    settings = Settings()
+    shared_path = str(tmp_path / "shared")
+
+    # Config initiale: un seul dépôt valide
+    valid_repo_cfg = RepositoryConfig(
+        name="valid",
+        url="https://example.com/valid.git",
+        branch="main",
+        path="./",
+        local_path=shared_path,
+        check_interval=60,
+    )
+    initial_project = ProjectConfig(
+        project="proj",
+        description="",
+        tokens=None,
+        repositories={"valid": valid_repo_cfg},
+    )
+    initial_loaded = LoadedConfig(settings=settings, projects={"proj": initial_project})
+    await _sync_config_to_db(initial_loaded)
+
+    # Nouvelle config : on introduit un dépôt conflictuel partageant le même chemin local
+    conflicting_repo_cfg = RepositoryConfig(
+        name="conflict",
+        url="https://example.com/conflict.git",
+        branch="main",
+        path="./",
+        local_path=shared_path,
+        check_interval=60,
+    )
+    updated_project = ProjectConfig(
+        project="proj",
+        description="",
+        tokens=None,
+        repositories={"valid": valid_repo_cfg, "conflict": conflicting_repo_cfg},
+    )
+    updated_loaded = LoadedConfig(settings=settings, projects={"proj": updated_project})
+    await _sync_config_to_db(updated_loaded)
+
+    # Le dépôt conflictuel doit être supprimé de la base
+    async with async_session() as session:
+        repos = (await session.execute(select(Repository))).scalars().all()
+
+    repo_names = {repo.name for repo in repos}
+    assert repo_names == {"valid"}
+
+
+@pytest.mark.asyncio
 async def test_sync_config_shared_local_path_success(tmp_path: Path, caplog) -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)

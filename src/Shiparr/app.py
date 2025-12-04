@@ -246,8 +246,12 @@ async def _sync_config_to_db(
                     repo.healthcheck_timeout = repo_cfg.healthcheck_timeout
                     repo.healthcheck_expected_status = repo_cfg.healthcheck_expected_status
 
-            # Supprimer les repos qui ne sont plus dans la config
-            names_in_config = set(project_cfg.repositories.keys())
+            # Supprimer les repos qui ne sont plus dans la config (ou devenus invalides)
+            names_in_config = {
+                repo_name
+                for repo_name in project_cfg.repositories.keys()
+                if (project_cfg.project, repo_name) not in repos_to_skip
+            }
             for repo_name, repo in existing_repos.items():
                 if repo_name not in names_in_config:
                     logger.info(
