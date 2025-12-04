@@ -17,12 +17,13 @@ from typing import Optional
 
 import httpx
 from docker.errors import DockerException
-from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .config import LoadedConfig
 from .git_manager import GitManager
 from .logging_utils import get_logger
-from .models import Deployment, Repository
+from .models import Deployment, Project, Repository
 from .sops_manager import SopsManager
 
 logger = get_logger(__name__)
@@ -35,11 +36,39 @@ class DeploymentError(RuntimeError):
 class Deployer:
     """Orchestre le cycle de déploiement pour un Repository."""
 
-    def __init__(self, session: AsyncSession, notifications=None, prune_enabled: bool = False) -> None:
+    def __init__(self, session: AsyncSession, notifications=None, prune_enabled: bool = False, config: LoadedConfig | None = None) -> None:
         self.session = session
         # notifications: objet NotificationManager ou None (injecté par app)
         self.notifications = notifications
         self.prune_enabled = prune_enabled
+        self.config = config
+
+    def _resolve_token(self, repository: Repository) -> Optional[str]:
+        """Résout le token d'authentification pour un repository donné."""
+        token: str | None = None
+        
+        # 1. Essayer de trouver un token au niveau du projet
+        if self.config and repository.project and repository.project.name in self.config.projects:
+            project_cfg = self.config.projects[repository.project.name]
+            if project_cfg.tokens:
+                # Logique heuristique simple pour l'instant
+                if "github" in repository.git_url and "github" in project_cfg.tokens:
+                    token = project_cfg.tokens["github"]
+                elif "gitlab" in repository.git_url and "gitlab" in project_cfg.tokens:
+                    token = project_cfg.tokens["gitlab"]
+                elif "default" in project_cfg.tokens:
+                    token = project_cfg.tokens["default"]
+                # Si un seul token défini, on l'utilise
+                elif len(project_cfg.tokens) == 1:
+                    token = list(project_cfg.tokens.values())[0]
+
+        # 2. Fallback global settings (GitHub Token)
+        if not token and self.config and self.config.settings.github_token:
+             # On n'utilise le token global que pour GitHub ou si on est désespéré
+             if "github.com" in repository.git_url:
+                 token = self.config.settings.github_token
+        
+        return token
 
     async def _create_deployment(self, repository: Repository, status: str) -> Deployment:
         deployment = Deployment(
@@ -211,7 +240,7 @@ class Deployer:
 
         logger.info("Starting deployment", extra={"repository_id": repository_id})
 
-        repo_stmt = select(Repository).where(Repository.id == repository_id)
+        repo_stmt = select(Repository).options(selectinload(Repository.project)).where(Repository.id == repository_id)
         result = await self.session.execute(repo_stmt)
         repository: Repository | None = result.scalar_one_or_none()
         if repository is None:
@@ -247,8 +276,9 @@ class Deployer:
             # 1. On met à jour le statut et le hash AVANT de lancer la commande qui risque de nous tuer
             # Cela évite la boucle infinie si le redémarrage réussit mais que le script meurt avant d'update la DB
             if repository.last_commit_hash:
+                token = self._resolve_token(repository)
                 remote_hash = await GitManager.get_remote_hash(
-                    repository.local_path, repository.branch
+                    repository.local_path, repository.branch, url=repository.git_url, token=token
                 )
                 # Mise à jour "préventive" du hash pour que le scheduler considère que c'est fait
                 repository.last_commit_hash = remote_hash
@@ -266,7 +296,8 @@ class Deployer:
             local_path = Path(repository.local_path).resolve()
             if local_path.exists():
                 try:
-                    await GitManager.pull(str(local_path), branch=repository.branch)
+                    token = self._resolve_token(repository)
+                    await GitManager.pull(str(local_path), branch=repository.branch, url=repository.git_url, token=token)
                 except Exception:
                     # Si échec pull, on est mal car on a déjà validé le hash en DB... 
                     # Mais c'est le risque de l'auto-update.
@@ -330,6 +361,8 @@ class Deployer:
 
             remote_hash = None
             # 2. Vérifier les changements
+            token = self._resolve_token(repository)
+            
             if repository.last_commit_hash:
                 logger.debug(
                     "Checking for remote changes",
@@ -341,7 +374,7 @@ class Deployer:
                     },
                 )
                 remote_hash = await GitManager.get_remote_hash(
-                    repository.local_path, repository.branch
+                    repository.local_path, repository.branch, url=repository.git_url, token=token
                 )
                 logger.debug(
                     "Remote hash fetched",
@@ -394,6 +427,7 @@ class Deployer:
                     url=repository.git_url,
                     branch=repository.branch,
                     local_path=str(local_path),
+                    token=token,
                 )
                 new_hash = await GitManager.get_local_hash(str(local_path))
             else:
@@ -407,6 +441,7 @@ class Deployer:
                         url=repository.git_url,
                         branch=repository.branch,
                         local_path=str(local_path),
+                        token=token,
                     )
                     new_hash = await GitManager.get_local_hash(str(local_path))
                 else:
@@ -419,7 +454,8 @@ class Deployer:
                             "local_path": str(local_path),
                             },
                         )
-                        new_hash = await GitManager.pull(str(local_path), branch=repository.branch)
+                        await GitManager.pull(str(local_path), branch=repository.branch, url=repository.git_url, token=token)
+                        new_hash = await GitManager.get_local_hash(str(local_path))
                     except Exception:
                         # Si dossier existe mais pas repo git valide ?
                         # (cas rare, on assume repo valide pour l'instant)
