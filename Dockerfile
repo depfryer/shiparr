@@ -1,6 +1,6 @@
 # Shiparr Dockerfile (à compléter selon les besoins de build)
 
-FROM python:3.11-slim AS base
+FROM python:3.14-slim AS base
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git curl ca-certificates tar xz-utils \
