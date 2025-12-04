@@ -88,7 +88,7 @@ async def test_deploy_with_changes(tmp_path: Path, monkeypatch):
         async def fake_remote_hash(local_path, branch):  # type: ignore[unused-argument]
             return "def"
 
-        async def fake_pull(local_path):  # type: ignore[unused-argument]
+        async def fake_pull(local_path, branch="main"):  # type: ignore[unused-argument]
             return "def"
 
         git_manager.GitManager.get_remote_hash = fake_remote_hash  # type: ignore[assignment]
@@ -141,7 +141,7 @@ async def test_deploy_failure(tmp_path: Path, monkeypatch):
         async def fake_remote_hash(local_path, branch):  # type: ignore[unused-argument]
             return "def"
 
-        async def fake_pull(local_path):  # type: ignore[unused-argument]
+        async def fake_pull(local_path, branch="main"):  # type: ignore[unused-argument]
             return "def"
 
         git_manager.GitManager.get_remote_hash = fake_remote_hash  # type: ignore[assignment]
@@ -193,7 +193,7 @@ async def test_deploy_with_sops(tmp_path: Path, monkeypatch):
 
         from Shiparr import git_manager
 
-        async def fake_pull(local_path):  # type: ignore[unused-argument]
+        async def fake_pull(local_path, branch="main"):  # type: ignore[unused-argument]
             return "def"
 
         git_manager.GitManager.pull = fake_pull  # type: ignore[assignment]

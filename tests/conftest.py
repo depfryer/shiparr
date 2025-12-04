@@ -11,8 +11,12 @@ from quart import Quart
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from Shiparr.app import create_app
-from Shiparr.database import async_session_factory, init_db
+from Shiparr.database import async_session_factory, init_db, dispose_engine
 
+@pytest.fixture(autouse=True)
+async def cleanup_engine():
+    yield
+    await dispose_engine()
 
 @pytest.fixture(scope="session")
 def event_loop():  # type: ignore[override]
@@ -22,10 +26,14 @@ def event_loop():  # type: ignore[override]
 
 
 @pytest.fixture()
-async def app(tmp_path: Path) -> AsyncIterator[Quart]:
+async def app(tmp_path: Path, monkeypatch) -> AsyncIterator[Quart]:
     # Configure Shiparr_DATA_PATH pour utiliser tmp_path
+    await dispose_engine()
+    monkeypatch.setenv("Shiparr_DATA_PATH", str(tmp_path))
+    monkeypatch.setenv("Shiparr_CONFIG_PATH", str(tmp_path / "config"))
     app = create_app()
     yield app
+    await dispose_engine()
 
 
 @pytest.fixture()
@@ -41,6 +49,7 @@ async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
     assert async_session_factory is not None
     async with async_session_factory() as session:
         yield session
+    await dispose_engine()
 
 
 @pytest.fixture()

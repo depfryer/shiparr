@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import json
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -164,6 +165,11 @@ async def _sync_config_to_db(
                         path=repo_cfg.path,
                         local_path=repo_cfg.local_path,
                         check_interval=repo_cfg.check_interval,
+                        priority=repo_cfg.priority,
+                        depends_on=json.dumps(repo_cfg.depends_on),
+                        healthcheck_url=repo_cfg.healthcheck_url,
+                        healthcheck_timeout=repo_cfg.healthcheck_timeout,
+                        healthcheck_expected_status=repo_cfg.healthcheck_expected_status,
                     )
                     session.add(repo)
                     created_repos += 1
@@ -234,6 +240,11 @@ async def _sync_config_to_db(
                     repo.path = repo_cfg.path
                     repo.local_path = repo_cfg.local_path
                     repo.check_interval = repo_cfg.check_interval
+                    repo.priority = repo_cfg.priority
+                    repo.depends_on = json.dumps(repo_cfg.depends_on)
+                    repo.healthcheck_url = repo_cfg.healthcheck_url
+                    repo.healthcheck_timeout = repo_cfg.healthcheck_timeout
+                    repo.healthcheck_expected_status = repo_cfg.healthcheck_expected_status
 
             # Supprimer les repos qui ne sont plus dans la config
             names_in_config = set(project_cfg.repositories.keys())
@@ -313,16 +324,38 @@ def create_app() -> Quart:
             loaded, notifications=app.config.get("Shiparr_NOTIFICATIONS")
         )
 
-        # 5. Initialiser et démarrer le Scheduler
+        # 5. Initialiser le QueueManager
+        from .queue_manager import QueueManager
+        
+        if database.async_session_factory:
+             queue_manager = QueueManager(
+                 session_factory=database.async_session_factory,
+                 notifications=app.config.get("Shiparr_NOTIFICATIONS"),
+                 prune_enabled=settings.enable_image_prune
+             )
+             app.config["Shiparr_QUEUE"] = queue_manager
+             await queue_manager.start()
+
+        # 6. Initialiser et démarrer le Scheduler
         from .deployer import Deployer
         from .scheduler import DeploymentScheduler
 
         async def run_deploy(repo_id: int) -> None:
             """Task exécutée par le scheduler pour chaque repo."""
-            if database.async_session_factory:
+            queue = app.config.get("Shiparr_QUEUE")
+            if queue:
+                # Scheduled tasks get lower priority (e.g. 10)
+                await queue.enqueue(repo_id, priority=10)
+            elif database.async_session_factory:
+                # Fallback if queue not avail (should not happen)
                 async with database.async_session_factory() as session:
                     notifications = app.config.get("Shiparr_NOTIFICATIONS")
-                    deployer = Deployer(session=session, notifications=notifications)
+                    settings = app.config["Shiparr_SETTINGS"]
+                    deployer = Deployer(
+                        session=session, 
+                        notifications=notifications,
+                        prune_enabled=settings.enable_image_prune
+                    )
                     await deployer.deploy(repo_id)
 
         scheduler = DeploymentScheduler(deploy_callable=run_deploy)
@@ -397,6 +430,11 @@ def create_app() -> Quart:
         if scheduler:
             logger.info("Stopping scheduler on shutdown")
             scheduler.stop()
+
+        queue = app.config.get("Shiparr_QUEUE")
+        if queue:
+            logger.info("Stopping queue manager")
+            await queue.stop()
 
         logger.info("Shutting down Shiparr app, disposing DB engine")
         await dispose_engine()

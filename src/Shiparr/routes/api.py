@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+import asyncio
+import os
 from typing import Any
 
-from quart import Blueprint, jsonify, current_app
+from quart import Blueprint, jsonify, current_app, request, Response
 from sqlalchemy import select
 
 from ..auth import require_basic_auth
@@ -45,6 +48,11 @@ def register(bp: Blueprint) -> None:
     bp.add_url_rule(
         "/api/deployments/<int:deployment_id>/logs",
         view_func=get_deployment_logs,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
+        "/api/repositories/<int:repo_id>/logs",
+        view_func=get_repository_logs,
         methods=["GET"],
     )
 
@@ -186,9 +194,19 @@ async def list_deployments(repo_id: int) -> Any:
 
 @require_basic_auth
 async def trigger_deploy(repo_id: int) -> Any:
+    queue = current_app.config.get("Shiparr_QUEUE")
+    if queue:
+        await queue.enqueue(repo_id, priority=100)
+        return jsonify({"status": "queued", "message": "Deployment enqueued"})
+
     async for session in get_session():
         notifications = current_app.config.get("Shiparr_NOTIFICATIONS")
-        deployer = Deployer(session=session, notifications=notifications)
+        settings = current_app.config["Shiparr_SETTINGS"]
+        deployer = Deployer(
+            session=session, 
+            notifications=notifications,
+            prune_enabled=settings.enable_image_prune
+        )
         deployment = await deployer.deploy(repo_id)
         return jsonify({"deployment_id": deployment.id, "status": deployment.status})
 
@@ -222,3 +240,54 @@ async def get_deployment_logs(deployment_id: int) -> Any:
         if deployment is None:
             return jsonify({"error": "not_found"}), 404
         return jsonify({"logs": deployment.logs or ""})
+
+
+@require_basic_auth
+async def get_repository_logs(repo_id: int) -> Any:
+    """Stream logs using docker compose logs -fn."""
+    async for session in get_session():
+        stmt = select(Repository).where(Repository.id == repo_id)
+        result = await session.execute(stmt)
+        repo = result.scalar_one_or_none()
+        if repo is None:
+            return jsonify({"error": "not_found"}), 404
+        
+        tail = request.args.get("tail", default=100, type=int)
+        
+        local_path = Path(repo.local_path).resolve()
+        if repo.path:
+             workdir = local_path / repo.path
+        else:
+             workdir = local_path
+             
+        if not workdir.exists():
+            return jsonify({"error": "workdir_not_found"}), 404
+
+        env = {**os.environ, "COMPOSE_PROJECT_NAME": f"shiparr_repo_{repo.id}"}
+        cmd = ["docker", "compose", "logs", "-f", "-n", str(tail)]
+
+        async def generate():
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=str(workdir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env
+            )
+            
+            try:
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        break
+                    yield line
+            except asyncio.CancelledError:
+                if process.returncode is None:
+                    process.terminate()
+                    try:
+                        await process.wait()
+                    except Exception:
+                        pass
+                raise
+
+        return Response(generate(), mimetype="text/plain")

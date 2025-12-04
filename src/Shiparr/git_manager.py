@@ -117,8 +117,8 @@ class GitManager:
         return remote_hash
 
     @staticmethod
-    async def pull(local_path: str | Path) -> str:
-        """Effectue un git pull et retourne le nouveau hash."""
+    async def pull(local_path: str | Path, branch: str = "main") -> str:
+        """Effectue un fetch + reset --hard pour garantir l'état."""
 
         path = Path(local_path)
 
@@ -127,7 +127,24 @@ class GitManager:
                 raise GitError(f"Repository does not exist at {path}")
             repo = Repo(path)
             origin = repo.remotes.origin
-            origin.pull()
+            
+            # Retry fetch
+            for attempt in range(3):
+                try:
+                    origin.fetch()
+                    break
+                except GitCommandError as e:
+                    if attempt == 2:
+                        raise GitError(f"Fetch failed after 3 attempts: {e}") from e
+                    time.sleep(2)
+
+            # Reset hard instead of pull to avoid conflicts
+            try:
+                repo.git.reset("--hard", f"origin/{branch}")
+                repo.git.clean("-fd")
+            except GitCommandError as e:
+                 raise GitError(f"Reset/Clean failed: {e}") from e
+                 
             return repo.head.commit.hexsha
 
         try:

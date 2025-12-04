@@ -45,9 +45,11 @@ async def init_engine(db_path: Path) -> AsyncEngine:
     url = get_database_url(db_path)
     engine = create_async_engine(url, future=True, echo=False)
 
-    # Activer WAL
+    # Activer WAL et optimisations
     async with engine.begin() as conn:  # pragma: no cover - simple pragma
         await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        await conn.exec_driver_sql("PRAGMA busy_timeout=10000")
+        await conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
 
     async_engine = engine
     async_session_factory = async_sessionmaker(
