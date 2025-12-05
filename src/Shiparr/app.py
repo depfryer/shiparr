@@ -208,7 +208,7 @@ async def _sync_config_to_db(
                             # utilitaire)
                             from .deployer import Deployer
 
-                            deployer = Deployer(session=session, notifications=notifications)
+                            deployer = Deployer(session=session, notifications=notifications, config=loaded)
                             try:
                                 await deployer.down(repo)
                             except Exception as e:
@@ -358,7 +358,8 @@ def create_app() -> Quart:
                     deployer = Deployer(
                         session=session, 
                         notifications=notifications,
-                        prune_enabled=settings.enable_image_prune
+                        prune_enabled=settings.enable_image_prune,
+                        config=app.config["Shiparr_CONFIG"]
                     )
                     await deployer.deploy(repo_id)
 

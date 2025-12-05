@@ -45,7 +45,7 @@ async def test_has_changes_true(monkeypatch, tmp_path: Path):
     async def fake_local(path):  # type: ignore[unused-argument]
         return "111"
 
-    async def fake_remote(path, branch):  # type: ignore[unused-argument]
+    async def fake_remote(path, branch, url=None, token=None):  # type: ignore[unused-argument]
         return "222"
 
     monkeypatch.setattr("Shiparr.git_manager.GitManager.get_local_hash", fake_local)
@@ -59,7 +59,7 @@ async def test_has_changes_false(monkeypatch, tmp_path: Path):
     async def fake_local(path):  # type: ignore[unused-argument]
         return "111"
 
-    async def fake_remote(path, branch):  # type: ignore[unused-argument]
+    async def fake_remote(path, branch, url=None, token=None):  # type: ignore[unused-argument]
         return "111"
 
     monkeypatch.setattr("Shiparr.git_manager.GitManager.get_local_hash", fake_local)
