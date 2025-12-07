@@ -1,13 +1,13 @@
 services:
   Shiparr:
-    image: Shiparr:latest
+    image: shiparr:latest-test
     build: .
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./config:/config:ro
-      - ./data:/data
+      - ./config:/app/config:ro
+      - ./data:/app/data
       - ./secrets/age.key:/secrets/age.key:ro
-      - ./deployments:/deployments
+      - ./deployments:/app/deployments
     env_file:
       - .env.example
     ports:

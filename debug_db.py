@@ -1,12 +1,31 @@
 import asyncio
 
+from pathlib import Path
 from sqlalchemy import select
 
-from src.Shiparr.database import get_session
+from src.Shiparr.database import get_session, init_db
 from src.Shiparr.models import Deployment, Project, Repository
+from src.Shiparr.config import ConfigLoader, Settings
+from src.Shiparr.app import _sync_config_to_db
+import src.Shiparr.database as db_module
 
 
 async def check_db():
+    # Initialisation DB
+    db_path = Path("./data/Shiparr.db")
+    await init_db(db_path)
+    
+    # Charger la config
+    settings = Settings(config_path=Path("./config/projects"))
+    loader = ConfigLoader(settings=settings)
+    loaded = loader.load()
+    
+    # Injecter la session factory dans le module database si elle n'est pas set par init_db
+    # (init_db le fait via init_engine, donc ça devrait être bon)
+    
+    # Synchroniser
+    await _sync_config_to_db(loaded)
+    
     # Récupération manuelle de la session depuis le générateur async
     # pour garantir le nettoyage via aclose() dans le bloc finally.
     session_gen = get_session()
@@ -26,7 +45,13 @@ async def check_db():
         stmt = select(Repository)
         result = await session.execute(stmt)
         for r in result.scalars():
-            print(f"- {r.id}: {r.name} (Project {r.project_id}) - Last Hash: {r.last_commit_hash}")
+            print(f"- {r.id}: {r.name} (Project {r.project_id})")
+            print(f"  URL: {r.git_url}")
+            print(f"  Local Path: {r.local_path}")
+            print(f"  Path: {r.path}")
+            token_preview = r.github_token[:4] + "..." if r.github_token else "None"
+            print(f"  Token: {token_preview}")
+            print(f"  Last Hash: {r.last_commit_hash}")
 
         print("\nDeployments:")
         stmt = select(Deployment)

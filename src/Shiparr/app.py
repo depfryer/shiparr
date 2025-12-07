@@ -164,6 +164,7 @@ async def _sync_config_to_db(
                         branch=repo_cfg.branch,
                         path=repo_cfg.path,
                         local_path=repo_cfg.local_path,
+                        github_token=repo_cfg.tokens_github,
                         check_interval=repo_cfg.check_interval,
                         priority=repo_cfg.priority,
                         depends_on=json.dumps(repo_cfg.depends_on),
@@ -239,6 +240,7 @@ async def _sync_config_to_db(
                     repo.branch = repo_cfg.branch
                     repo.path = repo_cfg.path
                     repo.local_path = repo_cfg.local_path
+                    repo.github_token = repo_cfg.tokens_github
                     repo.check_interval = repo_cfg.check_interval
                     repo.priority = repo_cfg.priority
                     repo.depends_on = json.dumps(repo_cfg.depends_on)
@@ -261,11 +263,53 @@ async def _sync_config_to_db(
                     session.delete(repo)
                     deleted_repos += 1
 
+        # Supprimer les projets qui ne sont plus dans la config
+        deleted_projects = 0
+        projects_in_config = set(loaded.projects.keys())
+        for project_name, project in existing_projects.items():
+            if project_name not in projects_in_config:
+                logger.info(
+                    "Deleting project no longer present in config",
+                    extra={"project": project_name},
+                )
+                
+                # Nettoyage des conteneurs et fichiers pour les repos de ce projet
+                result = await session.execute(
+                    select(Repository).where(Repository.project_id == project.id)
+                )
+                repos_to_delete = result.scalars().all()
+                
+                # Import local pour éviter cycles
+                from .deployer import Deployer
+                deployer = Deployer(session=session, notifications=notifications)
+                
+                for repo in repos_to_delete:
+                    # Arrêt des conteneurs
+                    try:
+                        logger.info(f"Stopping containers for orphan repository {repo.name}")
+                        await deployer.down(repo)
+                    except Exception as e:
+                        logger.warning(f"Failed to stop containers for orphan repo {repo.name}: {e}")
+                    
+                    # Suppression du dossier local
+                    if repo.local_path:
+                        local_path_obj = Path(repo.local_path)
+                        if local_path_obj.exists():
+                            try:
+                                shutil.rmtree(local_path_obj)
+                                logger.info(f"Deleted local path: {repo.local_path}")
+                            except Exception as e:
+                                logger.warning(f"Failed to delete {repo.local_path}: {e}")
+
+                session.delete(project)
+                deleted_projects += 1
+
         await session.commit()
         logger.debug(
             "Config sync to DB completed",
             extra={
                 "projects_created": created_projects,
+                "projects_deleted": deleted_projects,
                 "repos_created": created_repos,
                 "repos_updated": updated_repos,
                 "repos_deleted": deleted_repos,

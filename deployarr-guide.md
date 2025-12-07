@@ -540,6 +540,8 @@ Endpoint `/containers/{id}/logs`
 - age (télécharger depuis GitHub releases)
 - docker-cli (pour docker compose)
 
+**Important :** Le conteneur doit s'exécuter avec un utilisateur non-root (ex: 1000) disposant d'un répertoire HOME valide et accessible en écriture (ex: `/app`). Git nécessite un accès en écriture à `$HOME/.gitconfig` pour certaines opérations, même si nous ne stockons pas de credentials de manière persistante.
+
 **Structure :**
 
 ```dockerfile
@@ -549,7 +551,7 @@ Endpoint `/containers/{id}/logs`
 # 3. Télécharger et installer sops binaire
 # 4. Télécharger et installer age binaire
 # 5. Installer docker-cli (pas le daemon)
-# 6. Créer user non-root "Shiparr"
+# 6. Créer user non-root "Shiparr" et configurer HOME=/app
 # 7. Copier pyproject.toml et installer deps
 # 8. Copier le code source
 # 9. Définir WORKDIR, USER, EXPOSE, CMD

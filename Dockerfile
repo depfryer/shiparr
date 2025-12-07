@@ -36,16 +36,30 @@ RUN arch="$(uname -m)" \
     && chmod +x /usr/local/bin/docker \ 
     && rm -rf /tmp/docker /tmp/docker.tgz
 
+# Install docker-compose-plugin manually
+RUN mkdir -p /usr/local/lib/docker/cli-plugins \
+    && arch="$(uname -m)" \
+    && if [ "$arch" = "x86_64" ] || [ "$arch" = "amd64" ]; then dc_arch="x86_64"; else dc_arch="aarch64"; fi \
+    && curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${dc_arch}" -o /usr/local/lib/docker/cli-plugins/docker-compose \
+    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
 WORKDIR /app
+
+# Create a non-root user home directory to allow git config writes
+ENV HOME=/app
 
 COPY pyproject.toml ./
 COPY LICENSE ./
 COPY README.md ./
 COPY src ./src
+COPY entrypoint.sh ./
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . \
+    && chown -R 1000:1000 /app \
+    && chmod +x /app/entrypoint.sh
 
 USER 1000
 EXPOSE 8080
 
-CMD ["python", "-m", "Shiparr.app"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["python", "-m", "Shiparr"]

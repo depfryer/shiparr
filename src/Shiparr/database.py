@@ -48,7 +48,7 @@ async def init_engine(db_path: Path) -> AsyncEngine:
     # Activer WAL et optimisations
     async with engine.begin() as conn:  # pragma: no cover - simple pragma
         await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
-        await conn.exec_driver_sql("PRAGMA busy_timeout=10000")
+        await conn.exec_driver_sql("PRAGMA busy_timeout=30000")  # Increased to 30s
         await conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
 
     async_engine = engine

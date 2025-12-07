@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .logging_utils import get_logger
@@ -99,11 +99,21 @@ class RepositoryConfig(BaseModel):
     url: str
     branch: str = "main"
     path: str = "./"  # Sous-dossier contenant docker-compose.yml
-    local_path: str
+    local_path: str | None = None
+    tokens_github: str | None = None  # Token GitHub spécifique au repo
     check_interval: int = 300
     priority: int = 0
     depends_on: list[str] = Field(default_factory=list)
     env_file: str | None = None
+
+    @model_validator(mode="after")
+    def _set_default_local_path(self) -> RepositoryConfig:
+        """Définit le local_path par défaut si non fourni."""
+        if not self.local_path:
+            # Par défaut : /app/deployments/{name}
+            # Cela correspond au volume monté dans docker-compose.yml
+            self.local_path = f"/app/deployments/{self.name}"
+        return self
     
     # Healthchecks
     healthcheck_url: str | None = None
@@ -190,7 +200,13 @@ def _resolve_env_variables(raw: str) -> str:
 
     def _replace(match: re.Match[str]) -> str:
         var_name = match.group(1)
-        return os.environ.get(var_name, "")
+        val = os.environ.get(var_name, "")
+        if not val:
+            logger.warning(f"Environment variable {var_name} is not set or empty")
+        else:
+            # On ne loggue pas la valeur pour ne pas leaker les secrets, juste qu'on l'a trouvée
+            logger.debug(f"Resolved environment variable {var_name}")
+        return val.strip()
 
     return _ENV_VAR_PATTERN.sub(_replace, raw)
 

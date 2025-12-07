@@ -41,6 +41,7 @@ class Repository(Base):
     branch: Mapped[str] = mapped_column(String, nullable=False)
     path: Mapped[str] = mapped_column(String, nullable=False)
     local_path: Mapped[str] = mapped_column(String, nullable=False)
+    github_token: Mapped[str | None] = mapped_column(String, nullable=True)
     last_commit_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     check_interval: Mapped[int] = mapped_column(Integer, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0)

@@ -19,6 +19,10 @@ from typing import Optional
 
 from git import GitCommandError, Repo
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 # Cache pour éviter de faire plusieurs fetch() consécutifs pour le même dépôt
 # lorsqu'il est référencé par plusieurs projets.
 # Clé: (local_path_resolu, branch) -> (timestamp_monotonic, remote_hash)
@@ -56,6 +60,13 @@ class GitManager:
 
         def _clone() -> str:
             try:
+                masked_url = auth_url
+                if token and token in auth_url and len(token) > 8:
+                    masked_url = auth_url.replace(token, f"{token[:4]}...{token[-4:]}")
+                elif token:
+                    masked_url = auth_url.replace(token, "***")
+                
+                logger.debug(f"Cloning from URL: {masked_url} to {path}")
                 repo = Repo.clone_from(auth_url, path, branch=branch)
                 return repo.head.commit.hexsha
             except GitCommandError as exc:  # pragma: no cover - thin wrapper

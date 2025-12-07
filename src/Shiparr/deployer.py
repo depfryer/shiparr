@@ -77,6 +77,14 @@ class Deployer:
         
         return token
 
+    def _resolve_token(self, repository: Repository) -> str | None:
+        """Résout le token GitHub à utiliser pour ce repository."""
+        if repository.github_token:
+            return repository.github_token
+        # On pourrait ajouter ici une logique pour récupérer un token global
+        # depuis self.settings ou autre, mais pour l'instant on s'en tient au repo.
+        return None
+
     async def _create_deployment(self, repository: Repository, status: str) -> Deployment:
         deployment = Deployment(
             repository_id=repository.id,
@@ -85,7 +93,7 @@ class Deployer:
             started_at=datetime.utcnow(),
         )
         self.session.add(deployment)
-        await self.session.flush()  # obtient l'ID
+        await self.session.commit()  # Commit immediately to release lock
         return deployment
 
     async def _update_deployment(
@@ -95,11 +103,15 @@ class Deployer:
         status: str,
         logs: Optional[str] = None,
     ) -> None:
+        # Re-merge deployment if detached (because session might be new or committed)
+        # However, since we are in the same session context, committing just expires it.
+        # Accessing attributes will reload it.
         deployment.status = status
         deployment.finished_at = datetime.utcnow()
         if logs is not None:
             deployment.logs = logs
-        await self.session.flush()
+        self.session.add(deployment) # Ensure it is attached
+        await self.session.commit()
 
     async def down(self, repository: Repository) -> None:
         """Arrête les conteneurs pour un repository donné."""
@@ -296,8 +308,7 @@ class Deployer:
             await self._update_deployment(
                 deployment, status="success", logs="Self-update initiated - Container restarting..."
             )
-            await self.session.commit()
-
+            # No extra commit needed
             # 2. On procède à la mise à jour
             # Git Pull
             local_path = Path(repository.local_path).resolve()
@@ -320,11 +331,19 @@ class Deployer:
 
             # Docker Compose Up (Fire and forget ou presque)
             # On sait que cette commande va probablement terminer ce processus.
-            cmd = ["docker", "compose", "-f", "docker-compose.yml", "up", "-d"]
+            
+            # Détection automatique
+            compose_file = "docker-compose.yml"
             if repository.path:
                 workdir = local_path / repository.path
             else:
                 workdir = local_path
+
+            if not (workdir / compose_file).exists():
+                if (workdir / "docker-compose.yaml").exists():
+                    compose_file = "docker-compose.yaml"
+
+            cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
 
             logger.info(
                 "Executing docker compose up -d for self-update (process will die)",
@@ -406,7 +425,7 @@ class Deployer:
                         await self._update_deployment(
                             deployment, status="success", logs="No changes, services running"
                         )
-                        await self.session.commit()
+                        # No extra commit needed
                         return deployment
                     else:
                         logger.info(
@@ -435,6 +454,7 @@ class Deployer:
                 local_path.mkdir(parents=True, exist_ok=True)
                 # Clonage initial si le dossier est vide ou n'est pas un repo git
                 # Note: GitManager.pull() suppose un repo existant. Il faut ajouter le clone.
+                token = self._resolve_token(repository)
                 await GitManager.clone(
                     url=repository.git_url,
                     branch=repository.branch,
@@ -449,6 +469,7 @@ class Deployer:
                         "Local repo directory exists but is empty, cloning",
                         extra={"repository_id": repository.id, "local_path": str(local_path)},
                     )
+                    token = self._resolve_token(repository)
                     await GitManager.clone(
                         url=repository.git_url,
                         branch=repository.branch,
@@ -507,12 +528,18 @@ class Deployer:
                 await SopsManager.decrypt_file(enc, dec)
                 logs_parts.append(f"Decrypted env file {enc} -> {dec}")
 
+            # Détection automatique du fichier compose (yml ou yaml)
+            compose_file = "docker-compose.yml"
+            if not (workdir / compose_file).exists():
+                if (workdir / "docker-compose.yaml").exists():
+                    compose_file = "docker-compose.yaml"
+            
             # 6. docker compose up -d via CLI pour compatibilité (avec Retry)
             cmd = [
                 "docker",
                 "compose",
                 "-f",
-                "docker-compose.yml",
+                compose_file,
                 "up",
                 "-d",
             ]
@@ -523,6 +550,8 @@ class Deployer:
                     "repository_id": repository.id,
                     "workdir": str(workdir),
                     "cmd": " ".join(cmd),
+                    "local_path_resolved": str(local_path),
+                    "path_suffix": repository.path,
                 },
             )
 
@@ -597,7 +626,7 @@ class Deployer:
 
             logs = "\n".join(logs_parts).strip()
             await self._update_deployment(deployment, status="success", logs=logs)
-            await self.session.commit()
+            # No extra commit needed as _update_deployment commits
 
             logger.info(
                 "Deployment completed successfully",
@@ -630,7 +659,7 @@ class Deployer:
             )
             logs = f"Deployment failed: {exc}"
             await self._update_deployment(deployment, status="failed", logs=logs)
-            await self.session.commit()
+            # No extra commit needed
             if self.notifications is not None:
                 await self.notifications.notify_for_deployment("failure", deployment)
             return deployment
